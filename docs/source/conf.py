@@ -42,6 +42,8 @@ extensions = [
     'jupyter_sphinx.embed_widgets',
 	'nbsphinx',
 ]
+import os
+os.system('bash ./chrome.sh')
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
