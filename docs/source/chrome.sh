@@ -23,14 +23,14 @@ echo -e "-------------------------\r\n"
 tempfile="/tmp/chrome-linux-"$VERSION".zip"
 tempdir="/tmp/chrome-linux/"$VERSION
 # just putting this in my home directory now because i'm lazy
-permdir=~/$APPNAME"/"$VERSION
+#permdir=~/$APPNAME"/"$VERSION
 
 # get the large download ...
 echo "curl $DOWNLOADURL -O $tempfile"
 curl $DOWNLOADURL -o $tempfile
-mkdir -p $permdir
-unzip -o $tempfile -d $permdir
+mkdir -p $tempdir
+unzip -o $tempfile -d $tempdir
 
-~/${APPNAME}/${VERSION}/chrome-linux/chrome --headless --remote-debugging-port=9222&
+${tempdir}/chrome-linux/chrome --headless --remote-debugging-port=9222&
 
 
