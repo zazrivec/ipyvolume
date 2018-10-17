@@ -30,7 +30,9 @@ echo "curl $DOWNLOADURL -O $tempfile"
 curl $DOWNLOADURL -o $tempfile
 # mkdir -p $tempdir
 unzip -o $tempfile -d $tempdir
-
+pwd
+ls -al
+ls -al ${tempdir}/chrome-linux/
 ${tempdir}/chrome-linux/chrome --headless --remote-debugging-port=9222&
 
 
