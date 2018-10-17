@@ -1,10 +1,10 @@
 # how do you like to call this program? (chrome-linux, chrome, chromium, google-chrome?)
 APPNAME="chromium"
 # get the latest build number (JSON)
-VERSION=$(wget -qO- http://commondatastorage.googleapis.com/chromium-browser-continuous/Linux/LAST_CHANGE)
+VERSION=$(curl http://commondatastorage.googleapis.com/chromium-browser-continuous/Linux/LAST_CHANGE)
 # get some extra metadata to display on the command line
 LOGURL="http://commondatastorage.googleapis.com/chromium-browser-continuous/Linux/"$VERSION"/REVISIONS"
-LOG=$(wget -qO- $LOGURL)
+LOG=$(curl $LOGURL)
 # build the URL of the file we'll be downloading
 DOWNLOADURL="http://commondatastorage.googleapis.com/chromium-browser-continuous/Linux/"$VERSION"/chrome-linux.zip"
 
@@ -26,9 +26,10 @@ tempdir="/tmp/chrome-linux/"$VERSION
 permdir=~/$APPNAME"/"$VERSION
 
 # get the large download ...
-wget $DOWNLOADURL -O $tempfile
-mkdir -p $permdir
-unzip $tempfile -d $permdir
+echo "curl $DOWNLOADURL -O $tempfile"
+curl $DOWNLOADURL -o $tempfile
+mkdir -o $permdir
+unzip -y $tempfile -d $permdir
 
 ~/${APPNAME}/${VERSION}/chrome-linux/chrome --headless --remote-debugging-port=9222&
 
