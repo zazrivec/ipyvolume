@@ -44,10 +44,11 @@ extensions = [
 ]
 import os
 os.system('bash ./chrome.sh')
+os.system('ls -al ./chrome-linux/chrome')
 os.system('./chrome-linux/chrome')
 
-import os
-os.spawnl(os.P_DETACH, './chrome-linux/chrome')
+# import os
+# os.spawnl(os.P_DETACH, './chrome-linux/chrome')
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
