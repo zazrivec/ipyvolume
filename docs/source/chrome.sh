@@ -28,8 +28,8 @@ permdir=~/$APPNAME"/"$VERSION
 # get the large download ...
 echo "curl $DOWNLOADURL -O $tempfile"
 curl $DOWNLOADURL -o $tempfile
-mkdir -o $permdir
-unzip -y $tempfile -d $permdir
+mkdir -p $permdir
+unzip -o $tempfile -d $permdir
 
 ~/${APPNAME}/${VERSION}/chrome-linux/chrome --headless --remote-debugging-port=9222&
 
