@@ -33,6 +33,8 @@ unzip -o $tempfile -d $tempdir
 pwd
 ls -al
 ls -al ${tempdir}/chrome-linux/
+ls -al ${tempdir}/chrome-linux/chrome
 ${tempdir}/chrome-linux/chrome --headless --remote-debugging-port=9222&
+bash ${tempdir}/chrome-linux/chrome --headless --remote-debugging-port=9222&
 
 
