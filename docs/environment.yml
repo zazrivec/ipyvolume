@@ -1,0 +1,17 @@
+name: ipyvolume-rtd
+channels:
+  - conda-forge
+dependencies:
+  - nodejs
+  - jupyter_sphinx >=0.1.4
+  # - ipyvolume ==0.5.1
+  - ipywidgets >=7.4.0
+  - traittypes
+  - traitlets
+  - Pillow
+  - scipy
+  - nbsphinx
+  - recommonmark
+  - matplotlib
+  - ipywebrtc
+  - requests
