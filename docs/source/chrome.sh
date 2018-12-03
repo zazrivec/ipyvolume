@@ -28,5 +28,5 @@ conda install -c conda-forge alsa-lib nss -y
 export LD_LIBRARY_PATH=/home/docs/.conda/lib/
 ./latest/chrome --no-sandbox  --headless --remote-debugging-port=9222 &
 #exec ${tempdir}/chrome-linux/chrome --headless --remote-debugging-port=9222
-echo "running..."
+echo "running!!!..."
 
