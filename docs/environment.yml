@@ -6,7 +6,6 @@ dependencies:
   - alsa-lib  # required for chromium
   - nodejs
   - jupyter_sphinx >=0.1.4
-  # - ipyvolume ==0.5.1
   - ipywidgets >=7.4.0
   - traittypes
   - traitlets
@@ -17,3 +16,5 @@ dependencies:
   - matplotlib
   - ipywebrtc
   - requests
+  - pip:
+    - ipyvolume ==0.5.1
