@@ -25,8 +25,8 @@ popd
 rm -f ./latest
 ln -s $REVISION/chrome-linux/ ./latest
 echo `which conda`
-ls -al /home/docs/.conda/lib/
-export LD_LIBRARY_PATH=/home/docs/.conda/lib/
+ls -al /home/docs/checkouts/readthedocs.org/user_builds/ipyvolume/conda/docs/lib
+export LD_LIBRARY_PATH=/home/docs/checkouts/readthedocs.org/user_builds/ipyvolume/conda/docs/lib
 ./latest/chrome --no-sandbox  --headless --remote-debugging-port=9222 &
 #exec ${tempdir}/chrome-linux/chrome --headless --remote-debugging-port=9222
 echo "running!!!..."
