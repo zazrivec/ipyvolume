@@ -2,6 +2,8 @@ name: ipyvolume-rtd
 channels:
   - conda-forge
 dependencies:
+  - nss  # required for chromium
+  - alsa-lib  # required for chromium
   - nodejs
   - jupyter_sphinx >=0.1.4
   # - ipyvolume ==0.5.1
