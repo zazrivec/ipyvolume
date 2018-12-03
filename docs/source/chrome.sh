@@ -24,7 +24,8 @@ unzip $ZIP_FILE
 popd
 rm -f ./latest
 ln -s $REVISION/chrome-linux/ ./latest
-conda install -c conda-forge alsa-lib nss -y
+echo `which conda`
+ls -al /home/docs/.conda/lib/
 export LD_LIBRARY_PATH=/home/docs/.conda/lib/
 ./latest/chrome --no-sandbox  --headless --remote-debugging-port=9222 &
 #exec ${tempdir}/chrome-linux/chrome --headless --remote-debugging-port=9222

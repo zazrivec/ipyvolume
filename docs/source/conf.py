@@ -44,7 +44,6 @@ extensions = [
 ]
 import os
 os.system('bash ./chrome.sh')
-os.system('pip install ../')
 
 # os.system('ls -al ./chrome-linux/chrome')
 # os.system('./chrome-linux/chrome')
