@@ -64,6 +64,8 @@ on_rtd = os.environ.get('READTHEDOCS') == 'True'
 
 if on_rtd:
     os.system('bash ./chrome.sh')
+    os.system('pip install https://github.com/maartenbreddels/nbconvert/archive/snapshot.zip')
+
 
 # os.system('ls -al ./chrome-linux/chrome')
 # os.system('./chrome-linux/chrome')
