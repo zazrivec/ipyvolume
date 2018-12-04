@@ -40,10 +40,30 @@ extensions = [
     'sphinx.ext.ifconfig',
     'sphinx.ext.viewcode',
     'jupyter_sphinx.embed_widgets',
+    'sphinx_gallery.gen_gallery',
 	'nbsphinx',
 ]
+sphinx_gallery_conf = {
+     # path to your examples scripts
+     'examples_dirs': '../../examples',
+     # path where to save gallery generated examples
+     'gallery_dirs': 'auto_examples',
+    #  'image_scrapers': ('matplotlib'),#, 'ipyvolume'),
+     'executor': 'notebook',
+    #  'show_memory': True,
+    'nbconvert': {
+        'snapshot': {
+            'port': 10101,
+            'page_opener_class': 'headless'
+        }
+    }
+}
+
 import os
-os.system('bash ./chrome.sh')
+on_rtd = os.environ.get('READTHEDOCS') == 'True'
+
+if on_rtd:
+    os.system('bash ./chrome.sh')
 
 # os.system('ls -al ./chrome-linux/chrome')
 # os.system('./chrome-linux/chrome')
