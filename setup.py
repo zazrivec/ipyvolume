@@ -157,7 +157,8 @@ def _install_nodejs(tmpdir='/tmp'):
     print(cmd)
     os.system(cmd)
 
-if os.environ.get('READTHEDOCS', False) or os.environ.get('INSTALL_NODEJS', False):
+on_rtd = os.environ.get('READTHEDOCS', False)
+if on_rtd or os.environ.get('INSTALL_NODEJS', False):
     _install_nodejs()
 
 setup_args = {
@@ -171,8 +172,7 @@ setup_args = {
             'ipyvolume/static/extension.js',
             'ipyvolume/static/index.js',
             'ipyvolume/static/three.js',
-            # 'ipyvolume/static/index.js.map',
-        ]),
+        ] + ([] if on_rtd else ['ipyvolume/static/index.js.map'])),
         ('etc/jupyter/nbconfig/notebook.d' , ['ipyvolume.json'])
     ],
     'install_requires': [
