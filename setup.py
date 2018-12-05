@@ -81,9 +81,9 @@ class NPM(Command):
         pass
 
     def get_npm_name(self):
-        npmName = 'npm';
+        npmName = 'yarn';
         if platform.system() == 'Windows':
-            npmName = 'npm.cmd';
+            npmName = 'yarn.cmd';
         return npmName;
 
     def has_npm(self):
@@ -148,6 +148,9 @@ def _install_nodejs(tmpdir='/tmp'):
         print('nodejs was already downloaded, using that')
     os.environ['PATH'] = path + ':' + os.environ['PATH']
     cmd = 'node --version'
+    print(cmd)
+    os.system(cmd)
+    cmd = 'npm install -g yarn'
     print(cmd)
     os.system(cmd)
     cmd = 'df -h'
