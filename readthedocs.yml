@@ -1,6 +1,6 @@
 
 build:
-  image: 3.0
+  image: latest
 
 formats: []
 
@@ -8,4 +8,4 @@ python:
   version: 3.6
   pip_install: true
 
-requirements_file: requirements_rtd.yml
+requirements_file: requirements_rtd.txt
