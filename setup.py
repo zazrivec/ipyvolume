@@ -127,6 +127,33 @@ version_ns = {}
 with open(os.path.join(here, 'ipyvolume', '_version.py')) as f:
     exec(f.read(), {}, version_ns)
 
+def _install_nodejs(tmpdir='/tmp'):
+    """Made for usage on readthedocs"""
+    osname = platform.system().lower()
+    if osname == 'linux':
+        dirname = 'node-v10.14.1-linux-x64'
+        url = 'https://nodejs.org/dist/v10.14.1/node-v10.14.1-linux-x64.tar.xz'
+    elif osname == 'darwin':
+        dirname = 'node-v10.14.1-darwin-x64'
+        url = 'https://nodejs.org/dist/v10.14.1/node-v10.14.1-darwin-x64.tar.gz'
+    else:
+        raise SystemError('OS {} not supported for installing nodejs'.format(osname))
+    cmd = '(cd {tmpdir}; curl {url} | tar x)'.format(url=url, tmpdir=tmpdir)
+    path = os.path.join(tmpdir, dirname, 'bin')
+    if not os.path.exists(path):
+        return_value = os.system(cmd)
+        if return_value != 0:
+            raise SystemError('could not curl/untar')
+    else:
+        print('nodejs was already downloaded, using that')
+    os.environ['PATH'] = path + ':' + os.environ['PATH']
+    cmd = 'node --version'
+    print(cmd)
+    os.system(cmd)
+
+if os.environ.get('READTHEDOCS', False) or os.environ.get('INSTALL_NODEJS', False):
+    _install_nodejs()
+
 setup_args = {
     'name': 'ipyvolume',
     'version': version_ns['__version__'],
