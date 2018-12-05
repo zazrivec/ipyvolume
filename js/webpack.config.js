@@ -28,13 +28,20 @@ var resolve =  {
 
 
 module.exports = (env, argv) => {
-    let IS_PRODUCTION = false;
-    if (argv.mode === 'production') {
+    let IS_PRODUCTION = argv.mode === 'production';
+    let ON_RTD = process.env.READTHEDOCS == 'True';
+    if (IS_PRODUCTION) {
         console.log('Looks like we are in production mode!');
-        IS_PRODUCTION = true;
+    }
+    if (ON_RTD) {
+        // on RTD we need to be careful of memory usage
+        console.log('Looks like we are on readthedocs');
     }
     // const devtool = IS_PRODUCTION ? undefined : 'inline-source-map',
-    const devtool = IS_PRODUCTION ? undefined : 'source-map'
+    const devtool = IS_PRODUCTION ? 'cheap-eval-source-map' : 'source-map'
+    if(ON_RTD) {
+        devtool = undefined;
+    }
     return [
         {// Notebook extension
         //
