@@ -171,7 +171,7 @@ setup_args = {
             'ipyvolume/static/extension.js',
             'ipyvolume/static/index.js',
             'ipyvolume/static/three.js',
-            'ipyvolume/static/index.js.map',
+            # 'ipyvolume/static/index.js.map',
         ]),
         ('etc/jupyter/nbconfig/notebook.d' , ['ipyvolume.json'])
     ],
