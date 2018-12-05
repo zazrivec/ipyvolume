@@ -150,6 +150,9 @@ def _install_nodejs(tmpdir='/tmp'):
     cmd = 'node --version'
     print(cmd)
     os.system(cmd)
+    cmd = 'df -h'
+    print(cmd)
+    os.system(cmd)
 
 if os.environ.get('READTHEDOCS', False) or os.environ.get('INSTALL_NODEJS', False):
     _install_nodejs()
