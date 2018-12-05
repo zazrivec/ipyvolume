@@ -9,7 +9,7 @@ var rules = [
     {test: /\.png$/,use: 'url-loader?limit=10000000'},
     // { test: /\.js$/, loader: 'babel-loader', exclude: /node_modules/},
     { test: /\.(ts|js)?$/, use: [
-         { loader: 'cache-loader' },
+        //  { loader: 'cache-loader' },
         //  {
         //             loader: 'thread-loader',
         //             options: {
