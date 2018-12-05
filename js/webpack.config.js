@@ -38,7 +38,7 @@ module.exports = (env, argv) => {
         console.log('Looks like we are on readthedocs');
     }
     // const devtool = IS_PRODUCTION ? undefined : 'inline-source-map',
-    const devtool = IS_PRODUCTION ? 'cheap-eval-source-map' : 'source-map'
+    let devtool = IS_PRODUCTION ? 'cheap-eval-source-map' : 'source-map'
     if(ON_RTD) {
         devtool = undefined;
     }
