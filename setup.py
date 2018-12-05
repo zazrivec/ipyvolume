@@ -138,7 +138,7 @@ def _install_nodejs(tmpdir='/tmp'):
         url = 'https://nodejs.org/dist/v10.14.1/node-v10.14.1-darwin-x64.tar.gz'
     else:
         raise SystemError('OS {} not supported for installing nodejs'.format(osname))
-    cmd = '(cd {tmpdir}; curl {url} | tar x)'.format(url=url, tmpdir=tmpdir)
+    cmd = '(cd {tmpdir}; curl {url} | tar xJ)'.format(url=url, tmpdir=tmpdir)
     path = os.path.join(tmpdir, dirname, 'bin')
     if not os.path.exists(path):
         return_value = os.system(cmd)
