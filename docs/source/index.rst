@@ -137,6 +137,7 @@ Contents
     animation
     api
     vr
+    auto_examples/index
 
 
 Changelog
