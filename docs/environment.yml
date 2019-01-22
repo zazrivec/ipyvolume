@@ -17,7 +17,7 @@ dependencies:
   - ipywebrtc
   - requests
   - numpy >= 1.14
-  - pip:
-    - ipyvolume ==0.5.1
-    - https://github.com/maartenbreddels/sphinx-gallery/archive/notebook_executor.zip
-    - PyChromeDevTools
+  # - pip:
+  #   - ipyvolume ==0.5.1
+  #   - https://github.com/maartenbreddels/sphinx-gallery/archive/notebook_executor.zip
+  #   - PyChromeDevTools
