@@ -54,16 +54,15 @@ sphinx_gallery_conf = {
     'nbconvert': {
         'snapshot': {
             'port': 10101,
-            'page_opener_class': 'headless'
+            'page_opener_class': 'default'
         }
     }
 }
-
 import os
 on_rtd = os.environ.get('READTHEDOCS') == 'True'
 
-if on_rtd:
-    os.system('bash ./chrome.sh')
+# if on_rtd:
+#     os.system('bash ./chrome.sh')
     #os.system('pip install https://github.com/maartenbreddels/nbconvert/archive/snapshot_packed.zip')
 
 
