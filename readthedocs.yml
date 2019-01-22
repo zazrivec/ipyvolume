@@ -6,6 +6,6 @@ formats: []
 
 python:
   version: 3.6
-  pip_install: true
 
-requirements_file: docs/environment.yml
+conda:
+    file: docs/environment.yml
