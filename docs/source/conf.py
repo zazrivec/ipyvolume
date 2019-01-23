@@ -40,7 +40,7 @@ extensions = [
     'sphinx.ext.ifconfig',
     'sphinx.ext.viewcode',
     'jupyter_sphinx.embed_widgets',
-    'sphinx_gallery.gen_gallery',
+    # 'sphinx_gallery.gen_gallery',
 	'nbsphinx',
 ]
 sphinx_gallery_conf = {
