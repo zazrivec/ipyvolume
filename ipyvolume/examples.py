@@ -44,7 +44,7 @@ def xyz(shape=128, limits=[-3, 3], spherical=False, sparse=True, centers=False):
     else:
         x, y, z = np.mgrid.__getitem__(v)
     if spherical:
-        r = np.linalg.norm([x, y, z])
+        r = (x ** 2 + y**2 + z**2)**0.5
         theta = np.arctan2(y, x)
         phi = np.arccos(z / r)
         return x, y, z, r, theta, phi
@@ -103,6 +103,7 @@ def klein_bottle(
     texture=None,
     both=False,
     interval=1000,
+    **kwargs
 ):
     """Show one or two Klein bottles."""
     import ipyvolume.pylab as p3
@@ -112,8 +113,8 @@ def klein_bottle(
     v = np.linspace(0, 2 * pi, num=40, endpoint=endpoint)
     u, v = np.meshgrid(u, v)
     if both:
-        x1, y1, z1, _u1, _v1 = klein_bottle(endpoint=endpoint, draw=False, show=False)
-        x2, y2, z2, _u2, _v2 = klein_bottle(endpoint=endpoint, draw=False, show=False, figure8=True)
+        x1, y1, z1, _u1, _v1 = klein_bottle(endpoint=endpoint, draw=False, show=False, **kwargs)
+        x2, y2, z2, _u2, _v2 = klein_bottle(endpoint=endpoint, draw=False, show=False, figure8=True, **kwargs)
         x = [x1, x2]
         y = [y1, y2]
         z = [z1, z2]
@@ -131,6 +132,9 @@ def klein_bottle(
             x = 6 * cos(u) * (1 + sin(u)) + r * cos(u) * cos(v) * (u < pi) + r * cos(v + pi) * (u >= pi)
             y = 16 * sin(u) + r * sin(u) * cos(v) * (u < pi)
             z = r * sin(v)
+            x = x / 20
+            y = y / 20
+            z = z / 20
     if draw:
         if texture:
             uv = True
@@ -145,9 +149,10 @@ def klein_bottle(
                 v=v / (2 * np.pi),
                 wireframe=wireframe,
                 texture=texture,
+                **kwargs
             )
         else:
-            mesh = p3.plot_mesh(x, y, z, wrapx=not endpoint, wrapy=not endpoint, wireframe=wireframe, texture=texture)
+            mesh = p3.plot_mesh(x, y, z, wrapx=not endpoint, wrapy=not endpoint, wireframe=wireframe, texture=texture, **kwargs)
         if show:
             if both:
                 p3.animation_control(mesh, interval=interval)

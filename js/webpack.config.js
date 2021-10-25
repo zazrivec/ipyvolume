@@ -32,8 +32,9 @@ module.exports = [
         devtool: 'inline-source-map',
         output: {
             filename: 'extension.js',
-            path: path.resolve(__dirname, `../${pyname}/static`),
-            libraryTarget: 'amd'
+            path: path.resolve(__dirname, `../share/jupyter/nbextensions/${pyname}`),
+            libraryTarget: 'amd',
+            devtoolModuleFilenameTemplate: `webpack://jupyter-widgets/${pyname}/[resource-path]?[loaders]`,
         },
         resolve: resolve
     },
@@ -47,13 +48,14 @@ module.exports = [
         devtool: 'inline-source-map',
         output: {
             filename: 'index.js',
-            path: path.resolve(__dirname, `../${pyname}/static`),
-            libraryTarget: 'amd'
+            path: path.resolve(__dirname, `../share/jupyter/nbextensions/${pyname}`),
+            libraryTarget: 'amd',
+            devtoolModuleFilenameTemplate: `webpack://jupyter-widgets/${pyname}/[resource-path]?[loaders]`,
         },
         module: {
             rules: rules
         },
-        externals: ['three', 'jupyter-js-widgets', '@jupyter-widgets/base', '@jupyter-widgets/controls'],
+        externals: ['three', 'jupyter-js-widgets', '@jupyter-widgets/base'],
         resolve: resolve
     },
     {// Embeddable ipyvolume bundle
@@ -79,20 +81,21 @@ module.exports = [
             filename: 'index.js',
             path: path.resolve(__dirname, './dist/'),
             libraryTarget: 'amd',
-            publicPath: 'https://unpkg.com/ipyvolume@' + version + '/dist/'
+            publicPath: 'https://unpkg.com/ipyvolume@' + version + '/dist/',
+            devtoolModuleFilenameTemplate: `webpack://jupyter-widgets/${pyname}/[resource-path]?[loaders]`,
         },
         devtool: 'source-map',
         module: {
             rules: rules
         },
-        externals: ['jupyter-js-widgets', '@jupyter-widgets/base', '@jupyter-widgets/controls'],
+        externals: ['jupyter-js-widgets', '@jupyter-widgets/base'],
         resolve: resolve
     },
     {
         entry: 'three',
         output: {
             filename: 'three.js',
-            path: path.resolve(__dirname, `../${pyname}/static`),
+            path: path.resolve(__dirname, `../share/jupyter/nbextensions/${pyname}`),
             libraryTarget: 'amd'
         },
         devtool: 'source-map',

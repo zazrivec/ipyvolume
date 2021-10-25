@@ -213,19 +213,19 @@ def test_limits():
     # TODO: actually, default xlim should be None, and the limits should
     # then now grow, but 'move' around the new point
     f = ipv.figure()
-    assert f.xlim == [0, 1]
+    assert f.xlim == (0, 1)
     ipv.ylim(0, 10)
     ipv.zlim(-10, 0)
     ipv.scatter(3, 4, 5)
-    assert f.xlim == [0, 3]
-    assert f.ylim == [0, 10]
-    assert f.zlim == [-10, 5]
+    assert f.xlim == (0, 3)
+    assert f.ylim == (0, 10)
+    assert f.zlim == (-10, 5)
 
     f = ipv.figure()
     ipv.volshow(np.random.rand(5, 5, 5), extent=[[0.1, 0.9], [0.5, 2], [-2, 5]])
-    assert f.xlim == [0, 1]
-    assert f.ylim == [0, 2]
-    assert f.zlim == [-2, 5]
+    assert f.xlim == (0, 1)
+    assert f.ylim == (0, 2)
+    assert f.zlim == (-2, 5)
 
 
 def test_style():
@@ -449,3 +449,32 @@ def test_datasets():
     ipyvolume.datasets.aquariusA2.fetch()
     ipyvolume.datasets.hdz2000.fetch()
     ipyvolume.datasets.zeldovich.fetch()
+
+
+def test_light_components():
+    ambient = ipyvolume.light_ambient()
+    assert ambient.type == 'AmbientLight'
+    assert ambient.color == 'white'
+    assert ambient.intensity == 1
+
+    hemisphere = ipyvolume.light_hemisphere()
+    assert hemisphere.type == 'HemisphereLight'
+    assert hemisphere.color == '#ffffbb'
+    assert hemisphere.groundColor == '#080820'
+
+    directional = ipyvolume.light_directional()
+    assert directional.color == 'white'
+
+    spot = ipyvolume.light_spot()
+    assert spot.color == 'white'
+
+    point = ipyvolume.light_point()
+    assert point.color == 'white'
+
+
+def test_box_aspect():
+    f = ipv.figure()
+    ipv.set_box_aspect((1, 2, 4))
+    assert f.box_size == [0.25, 0.5, 1.]
+    ipv.set_box_aspect((1, 2, 4), zoom=0.5)
+    assert f.box_size == [0.125, 0.25, 0.5]

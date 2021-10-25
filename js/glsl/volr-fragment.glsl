@@ -1,4 +1,11 @@
 precision highp float;
+#include <common>
+#include <bsdfs>
+#include <lights_pars_begin>
+#include <lights_phong_pars_fragment>
+
+uniform mat3 normalMatrix;
+
 uniform sampler2D back_tex;
 uniform sampler2D geometry_depth_tex;
 
@@ -20,6 +27,12 @@ struct Volume
     vec3 scale;
     vec3 offset;
     bool lighting;
+
+    // phong lighting models parameters
+    vec3 diffuseColor;
+    vec3 specular;
+    vec3 emissive;
+    float shininess;
 };
 
 #if (VOLUME_COUNT > 0)
@@ -76,7 +89,9 @@ uniform int steps;
 
 
 vec2 compute_slice_offset(float slice, float columns, vec2 uv_slice_spacing) {
-    return uv_slice_spacing * vec2(mod(slice, columns), floor(slice / columns));
+    float column = floor((slice+0.5) / (columns));
+    float row = slice - column * columns;
+    return uv_slice_spacing * vec2(row, column);
 }
 vec4 sample_as_3d_texture(sampler2D tex, vec2 tex_size, vec3 texCoord, vec2 slice_size, float slices, float rows, float columns) {
   float slice   = texCoord.z*slices*(slices-1.)/slices ;
@@ -119,6 +134,9 @@ vec2 sample(sampler2D data, Volume volume, vec3 ray_pos, inout vec3 normal) {
         return vec2(0.0);
     vec4 sample = sample_as_3d_texture(data, volume.size, pos_relative, volume.slice_size, volume.slices, volume.rows, volume.columns);
     normal = (-sample.xyz)*2.+1.;
+    // this seems to match observations, not fully sure why x and z are flipped.
+    normal.xyz = normal.zyx;
+
     float raw_data_value = sample.a; //(sample.a - data_min) * data_scale;
     float scaled_data_value = (raw_data_value*(volume.data_range[1] - volume.data_range[0])) + volume.data_range[0];
     float data_value = (scaled_data_value - volume.show_range[0])/(volume.show_range[1] - volume.show_range[0]);
@@ -131,10 +149,46 @@ vec2 sample(sampler2D data, Volume volume, vec3 ray_pos, inout vec3 normal) {
     return vec2(data_value, 1);
 }
 
-vec4 apply_lighting(vec4 color, vec3 normal) {
-    float cosangle_light = max((dot(light_dir, normal)), 0.);
-    float cosangle_eye = max((dot(eye, normal)), 0.);
-    vec4 result = vec4(color.rgb * (ambient_coefficient + diffuse_coefficient*cosangle_light + specular_coefficient * pow(cosangle_eye, specular_exponent)), color.a);
+vec4 apply_lighting(vec4 color, vec3 objectNormal, vec3 position, Volume volume) {
+    // only do phong lighting when we have lights
+    #if ( NUM_POINT_LIGHTS > 0 ) || ( NUM_SPOT_LIGHTS > 0 ) || ( NUM_DIR_LIGHTS > 0 ) || ( NUM_RECT_AREA_LIGHTS > 0 ) || ( NUM_HEMI_LIGHTS > 0 )
+        vec3 normal = normalize(normalMatrix * objectNormal);
+        vec3 vViewPosition = position;
+        vec3 emissive = volume.emissive;
+
+
+        // this is quite similar to meshphong_frag.glsl
+        vec4 diffuseColor = color;
+        ReflectedLight reflectedLight = ReflectedLight( vec3( 0.0 ), vec3( 0.0 ), vec3( 0.0 ), vec3( 0.0 ) );
+        vec3 totalEmissiveRadiance = emissive;
+
+
+        // the replacement for: #include <lights_phong_fragment>
+        BlinnPhongMaterial material;
+        material.diffuseColor = diffuseColor.rgb;
+        material.specularColor = volume.specular;
+        material.specularShininess = volume.shininess;
+        material.specularStrength = 1.0;
+
+        #include <lights_fragment_begin>
+        // we don't support light maps
+        // #include <lights_fragment_maps>
+        // no need to include this for Phong, but more consistent with mesh_phong_frag.glsl
+        #include <lights_fragment_end>
+
+        // modulation (not supported)
+        #include <aomap_fragment>
+
+        vec3 outgoingLight = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse + reflectedLight.directSpecular + reflectedLight.indirectSpecular + totalEmissiveRadiance;
+
+        // also not supported
+        // #include <envmap_fragment>
+
+        vec4 result = vec4( outgoingLight, diffuseColor.a );
+    #else
+        vec4 result = color;
+    #endif
+
     return result;
 }
 
@@ -160,7 +214,7 @@ vec4 add_sample(sampler2D data, sampler2D transfer_function, Volume volume, vec3
 
     vec4 color_sample = texture2D(transfer_function, vec2(data_value, 0.5));
     if(volume.lighting) {
-        color_sample = apply_lighting(color_sample, normal);
+        color_sample = apply_lighting(color_sample, normal, ray_pos, volume);
     }
 
     // float intensity = color_sample.a;
@@ -318,12 +372,30 @@ void main(void) {
     #else
         gl_FragColor = color;
     #endif
-    //gl_FragColor = vec4(ray_begin.xyz, 0.1) * brightness;
+    // code below is used for debugging purposes
+    // float x = floor((pixel.x *500. / 10.));
+    // float y = floor((pixel.y *500. / 10.));
+    // // gl_FragColor = vec4(x / 10., 0.0, 0.0, 1.0);
+    // // gl_FragColor = vec4(y / 10., 0.0, 0.0, 1.0);
+    // vec2 result;
+    // float eps = 1. - 1e-4;
+    // float modulo = mod(x, y * eps);
+    // float offset = x - modulo * y;
+    // offset = floor(x / y);
+    // gl_FragColor = vec4(mod(x, x) > 0. ? 1.0 : 0., 0.0, 0.0, 1.0);
+    // gl_FragColor = vec4(modulo >= x ? 1.0 : 0., 0.0, 0.0, 1.0);
+    // gl_FragColor = vec4(offset >= 0.5 ? 1.0 : 0., 0.0, 0.0, 1.0);
+    // gl_FragColor = vec4(offset/x, 0.0, 0.0, 1.0);
+    // eps = 0.;
+    // gl_FragColor = vec4(float(int(x / (y - eps))) / 1., 0.0, 0.0, 1.0);
+    // gl_FragColor = vec4(texture2D(data[0], pixel).a * 140., 0., 0., 1.0);
+    // gl_FragColor = vec4(ray_begin.xyz, 1.);
+    // gl_FragColor = vec4(ray_begin.xyz, 0.1) * brightness;
     //gl_FragColor = vec4(rotation[0], 1) * brightness;
-    //gl_FragColor = vec4(alpha_total, 0., 0., 1.);
+    // gl_FragColor = vec4(alpha_total, 0., 0., 1.);
     //gl_FragColor = texture2D(volume, vec2(ray_begin.x, ray_begin.y));
-    // gl_FragColor = vec4(ray_pos.x, ray_pos.y, ray_pos.z, 1);
-    //gl_FragColor = texture2D(transfer_function, vec2(pixel.x, 0.5));
+    // gl_FragColor = vec4(ray_begin.x, ray_begin.y, ray_begin.z, 1.);
+    // gl_FragColor = texture2D(transfer_function, vec2(pixel.x, 0.5));
     //gl_FragColor = vec4(texture2D(volume, vec2(pixel.x, pixel.y)).rgb, 1.0);
     // gl_FragColor = vec4(pixel.x, pixel.y, 0, 1);
     // gl_FragColor = vec4(ray_end, 1.);
@@ -360,7 +432,7 @@ void cast_ray_max(vec3 ray_begin, vec3 ray_end) {
                 // the weight of the coordinate equals its opacity
                 max_colors[{{.}}] = texture2D(transfer_function_max_int[{{.}}], vec2(max_values[{{.}}], 0.5));
                 if(volumes_max_int[{{.}}].lighting)
-                    max_colors[{{.}}] = apply_lighting(max_colors[{{.}}], normal);
+                    max_colors[{{.}}] = apply_lighting(max_colors[{{.}}], normal, ray_pos, volumes_max_int[{{.}}]);
                 float alpha = clamp(max_colors[{{.}}].a * volumes_max_int[{{.}}].opacity_scale * 10., 0., 1.);
                 max_colors[{{.}}].a = alpha;
                 #ifdef COORDINATE

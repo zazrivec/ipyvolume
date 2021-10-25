@@ -5,6 +5,7 @@ import io
 import time
 import functools
 import collections
+import collections.abc
 
 import numpy as np
 import requests
@@ -20,7 +21,7 @@ def next_power_of_2(x):
 # original from http://stackoverflow.com/questions/3232943/update-value-of-a-nested-dictionary-of-varying-depth
 def dict_deep_update(d, u):
     for k, v in u.items():
-        if isinstance(v, collections.Mapping):
+        if isinstance(v, collections.abc.Mapping):
             r = dict_deep_update(d.get(k, {}), v)
             d[k] = r
         else:
@@ -204,6 +205,8 @@ def reduce_size(data, max_size, extent):
             slices2 = [slice(None, None, None)] * 3
             slices2[axis] = slice(1, None, 2)
             # print(data.shape, data.__getitem__(slices1).shape, data.__getitem__(slices2).shape)
+            slices1 = tuple(slices1)
+            slices2 = tuple(slices2)
             data = (data[slices1] + data[slices2]) / 2
             if shape[axis] % 2:
                 width = xmax - xmin

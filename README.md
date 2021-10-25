@@ -23,9 +23,9 @@ Ipyvolume currenty can
  * Animations / sequences, all scatter/quiver plot properties can be a list of arrays, which can represent time snapshots.
  * Stylable (although still basic)
  * Integrates with
-  * [ipywidgets](https://github.com/ipython/ipywidgets) for adding gui controls (sliders, button etc), see an [example at the documentation homepage](http://ipyvolume.readthedocs.io/en/latest/index.html#built-on-ipywidgets)
-  * [bokeh](//bokeh.pydata.org)  by [linking the selection](http://ipyvolume.readthedocs.io/en/latest/bokeh.html)
-  * [bqplot](https://github.com/bloomberg/bqplot) by [linking the selection](http://ipyvolume.readthedocs.io/en/latest/bqplot.html)
+   * [ipywidgets](https://github.com/ipython/ipywidgets) for adding gui controls (sliders, button etc), see an [example at the documentation homepage](http://ipyvolume.readthedocs.io/en/latest/index.html#built-on-ipywidgets)
+   * [bokeh](//bokeh.pydata.org)  by [linking the selection](http://ipyvolume.readthedocs.io/en/latest/bokeh.html)
+   * [bqplot](https://github.com/bloomberg/bqplot) by [linking the selection](http://ipyvolume.readthedocs.io/en/latest/bqplot.html)
 
 Ipyvolume will probably, but not yet:
  * Render labels in latex.
@@ -53,6 +53,8 @@ Documentation is generated at readthedocs: [![Documentation](https://readthedocs
 
 # Installation
 
+If you want to use Jupyter Lab, please use version 3.0.
+
 ## Using pip
 
 *Advice: Make sure you use conda or virtualenv. If you are not a root user and want to use the `--user` argument for pip, you expose the installation to all python environments, which is a bad practice, make sure you know what you are doing.*
@@ -65,18 +67,6 @@ $ pip install ipyvolume
 
 ```
 $ conda install -c conda-forge ipyvolume
-```
-
-## For Jupyter lab users
-
-The Jupyter lab extension is not enabled by default (yet).
-
-```
-$ conda install -c conda-forge nodejs  # or some other way to have a recent node
-$ jupyter labextension install @jupyter-widgets/jupyterlab-manager
-$ jupyter labextension install ipyvolume
-$ jupyter labextension install jupyter-threejs
-
 ```
 
 
@@ -113,18 +103,12 @@ $ jupyter nbextension enable --py --user widgetsnbextension
 $ git clone https://github.com/maartenbreddels/ipyvolume.git
 $ cd ipyvolume
 $ pip install -e .
-$ jupyter nbextension install --py --symlink --sys-prefix ipyvolume
+$ jupyter nbextension install --py --overwrite --symlink --sys-prefix ipyvolume
 $ jupyter nbextension enable --py --sys-prefix ipyvolume
+# for jupyterlab (>=3.0), symlink share/jupyter/labextensions/bqplot-image-gl
+$ jupyter labextension develop . --overwrite
 ```
 
-For all cases make sure [ipywidgets is enabled](http://ipywidgets.readthedocs.io/en/latest/user_install.html) if you use Jupyter notebook version < 5.3 (using `--user` instead of `--sys-prefix` if doing a local install):
-
-```
-$ jupyter nbextension enable --py --sys-prefix widgetsnbextension
-$ jupyter nbextension enable --py --sys-prefix pythreejs
-$ jupyter nbextension enable --py --sys-prefix ipywebrtc
-$ jupyter nbextension enable --py --sys-prefix ipyvolume
-```
 
 ## Developer workflow
 
