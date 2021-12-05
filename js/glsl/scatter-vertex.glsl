@@ -8,7 +8,7 @@
 #define USE_SCALE_AUX
 #include <scales>
 
- // for animation, all between 0 and 1
+// for animation, all between 0 and 1
 uniform float animation_time_x;
 uniform float animation_time_y;
 uniform float animation_time_z;
@@ -44,9 +44,10 @@ varying vec2 vertex_uv;
     attribute float y_previous;
     attribute float z_next;
     attribute float z_previous;
-    // attribute float aux_next;
-    // attribute float aux_previous;
-
+#ifdef USE_AUX
+    attribute float aux_next;
+    attribute float aux_previous;
+#endif
     attribute vec3 v_next;
     attribute vec3 v_previous;
 
@@ -65,7 +66,21 @@ varying vec2 vertex_uv;
 
 uniform sampler2D colormap;
 
-#if defined( AS_DEFAULT ) || defined( AS_COORDINATE )
+attribute float instance_id;
+uniform float id_offset;
+
+vec4 encodeId(float v) {
+    vec4 color;
+    // matches Figure.readId
+    color.b = floor(v / 256.0 / 256.0);
+    color.g = floor((v - color.b * 256.0 * 256.0) / 256.0);
+    color.r = floor(v - color.b * 256.0 * 256.0 - color.g * 256.0);
+    color.a = 255.0;
+    // normalize
+    return color / 255.0;
+}
+
+#if defined( AS_DEFAULT ) || defined( AS_COORDINATE ) || defined( AS_ID )
     // similar to phong
     // varying vec3 vColor;
     #include <common>
@@ -81,7 +96,7 @@ uniform sampler2D colormap;
     #include <shadowmap_pars_vertex>
     #include <logdepthbuf_pars_vertex>
     #include <clipping_planes_pars_vertex>
-#endif //defined( AS_DEFAULT ) || defined( AS_COORDINATE )
+#endif //defined( AS_DEFAULT ) || defined( AS_COORDINATE ) || defined( AS_ID )
 
 #ifdef AS_LAMBERT
     #define LAMBERT
@@ -199,7 +214,9 @@ void main(void) {
     float size_current = mix(size_previous, size_next, animation_time_size);
     // TODO: replace the 0. in SCALE_SIZE_X(0.) by a uniform, so we can make it work with log?
     vec3 size_vector = vec3(SCALE_SIZE_X(size_current) - SCALE_SIZE_X(0.), SCALE_SIZE_Y(size_current) - SCALE_SIZE_Y(0.), SCALE_SIZE_Z(size_current) -  SCALE_SIZE_Z(0.));
-    // float aux_current = mix(aux_previous, aux_next, animation_time_aux);
+#ifdef USE_AUX
+    float aux_current = mix(aux_previous, aux_next, animation_time_aux);
+#endif
     vec3 position_current_offset = mix(position_offset_previous, position_offset_next, animation_time);
     vec3 model_pos = vec3(SCALE_X(position_current_offset.x), SCALE_Y(position_current_offset.y), SCALE_Z(position_current_offset.z));
     // vec3 model_pos = vec3((position_current_offset.x), (position_current_offset.y), (position_current_offset.z));
@@ -222,7 +239,7 @@ void main(void) {
 #endif
 
     // we repeat threejs's shader, up to begin_vertex
-#if defined( AS_DEFAULT ) || defined( AS_COORDINATE )
+#if defined( AS_DEFAULT ) || defined( AS_COORDINATE ) || defined( AS_ID )
     #include <uv_vertex>
     #include <uv2_vertex>
     #include <color_vertex>
@@ -324,8 +341,10 @@ void main(void) {
     // vec3 positionEye = ( modelViewMatrix * vec4( model_pos, 1.0 ) ).xyz;
     // vertex_position = positionEye;
     vertex_uv = position.xy / 2. - 0.5;
-#ifdef AS_COORDINATE
+#if defined( AS_COORDINATE )
     vertex_color = vec4(model_pos + vec3(0.5, 0.5, 0.5), 1.0);
+#elif defined( AS_ID )
+    vertex_color = encodeId(instance_id + id_offset);
 #else
     #ifdef USE_COLORMAP
         float color_current = mix(color_previous, color_next, animation_time_color);
@@ -340,7 +359,7 @@ void main(void) {
     #endif
 
 
-#if defined( AS_DEFAULT ) || defined( AS_COORDINATE )
+#if defined( AS_DEFAULT ) || defined( AS_COORDINATE ) || defined( AS_ID )
     #include <morphtarget_vertex>
     #include <skinning_vertex>
     #include <displacementmap_vertex>
@@ -356,7 +375,7 @@ void main(void) {
     // #include <envmap_vertex>
     #include <shadowmap_vertex>
     #include <fog_vertex>    
-#endif // defined( AS_DEFAULT ) || defined( AS_COORDINATE )
+#endif // defined( AS_DEFAULT ) || defined( AS_COORDINATE ) || defined( AS_ID )
 #ifdef AS_LAMBERT
     #include <morphtarget_vertex>
     #include <skinning_vertex>

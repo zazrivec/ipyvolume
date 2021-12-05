@@ -24,8 +24,8 @@ const axis_names = ["x", "y", "z"];
 
 (window as any).THREE = THREE;
 
-import { RenderTarget } from "three";
-import { createD3Scale } from "./scales";
+import { RenderTarget, ShaderMaterial } from "three";
+import { createD3Scale, patchShader } from "./scales";
 import "./three/CombinedCamera.js";
 import "./three/DeviceOrientationControls.js";
 import "./three/OrbitControls.js";
@@ -40,6 +40,8 @@ const shaders = {
     "volr-vertex": (require("raw-loader!../glsl/volr-vertex.glsl") as any).default,
     "shadow-fragment": (require("raw-loader!../glsl/shadow-fragment.glsl") as any).default,
     "shadow-vertex": (require("raw-loader!../glsl/shadow-vertex.glsl") as any).default,
+    "box-fragment": (require("raw-loader!../glsl/box-fragment.glsl") as any).default,
+    "box-vertex": (require("raw-loader!../glsl/box-vertex.glsl") as any).default,
 };
 
 // similar to _.bind, except it
@@ -139,7 +141,7 @@ class FigureModel extends widgets.DOMWidgetModel {
             meshes: null,
             lights: [],
             volumes: null,
-            show: "Volume",
+            show: "render",
             scales: {},
             xlabel: "x",
             ylabel: "y",
@@ -156,6 +158,10 @@ class FigureModel extends widgets.DOMWidgetModel {
             cube_resolution: 512,
             box_center: [0.5, 0.5, 0.5],
             box_size: [1, 1, 1],
+            popup_debouce: 100,
+            slice_x: 0,
+            slice_y: 0,
+            slice_z: 0,
             _shaders: {},  // override shaders / hot reload
         };
     }
@@ -184,6 +190,7 @@ class FigureView extends widgets.DOMWidgetView {
     setting_icon: any;
     setting_icon_180: any;
     setting_icon_360: any;
+    popup_container: HTMLDivElement;
     canvas_container: HTMLDivElement;
     canvas_overlay_container: HTMLDivElement;
     canvas_overlay: HTMLCanvasElement;
@@ -217,6 +224,7 @@ class FigureView extends widgets.DOMWidgetView {
     volume_views: { [key: string]: VolumeView };
     lights: { [key: string]: THREE.Light };
     volume_back_target: THREE.WebGLRenderTarget;
+    volume_front_target: THREE.WebGLRenderTarget;
     geometry_depth_target: THREE.WebGLRenderTarget;
     color_pass_target: THREE.WebGLRenderTarget;
     screen_pass_target: THREE.WebGLRenderTarget;
@@ -249,9 +257,23 @@ class FigureView extends widgets.DOMWidgetView {
     // all plot objects are children of this object, such that we can transform the matrix
     // without affecting the scene (and thus the camera controls)
     rootObject: THREE.Object3D = null;
+    id_pass_target: THREE.WebGLRenderTarget;
+    lastId: number;
+    _wantsPopup: boolean;
+
+    // rendered to get the front coordinate
+    front_box_mesh: THREE.Mesh;
+    front_box_geo: THREE.BoxBufferGeometry;
+    front_box_material: THREE.ShaderMaterial;
+    slice_icon: ToolIcon;
 
     readPixel(x, y) {
         return this.readPixelFrom(this.screen_texture, x, y);
+    }
+
+    readId(x, y) {
+        const [red, green, blue, alpha] = this.readPixelFrom(this.id_pass_target, x, y)
+        return red + green*256 + blue*256*256;
     }
 
     readPixelFrom(target: RenderTarget, x, y) {
@@ -398,6 +420,17 @@ class FigureView extends widgets.DOMWidgetView {
                 this.touch();
             };
 
+        this.slice_icon = new ToolIcon("fa-cut", this.toolbar_div);
+        this.slice_icon.a.title = "Set slice coordinate by hovering or clicking the edges of the bounding box";
+        this.slice_icon.a.onclick = () => {
+                if (this.model.get("mouse_mode") === "slice") {
+                    this.model.set("mouse_mode", "normal");
+                } else {
+                    this.model.set("mouse_mode", "slice");
+                }
+                this.touch();
+            };
+
         // this.zoom_icon.active(false)
         // using ctrl and shift, you can quickly change mode
         // remember the previous mode so we can restore it
@@ -497,14 +530,19 @@ class FigureView extends widgets.DOMWidgetView {
         this.canvas_renderer_container = document.createElement("div");
         this.canvas_renderer_container.appendChild(this.renderer.domElement);
 
+        this.popup_container = document.createElement("div");
+        this.popup_container.classList.add('ipyvolume-popup-container')
+
         this.canvas_container.appendChild(this.canvas_renderer_container);
         this.canvas_container.appendChild(this.canvas_overlay_container);
+        this.canvas_container.appendChild(this.popup_container);
+
         this.canvas_overlay_container.style.position = "absolute";
         this.canvas_overlay_container.style.zIndex = "2";
         this.canvas_overlay_container.style.pointerEvents = "none";
         this.canvas_renderer_container.style.position = "absolute";
         this.canvas_renderer_container.style.zIndex = "1";
-        this.canvas_container.style.position = "relative";
+        this.canvas_container.classList.add("ipyvolume-canvas-container")
         this.el.appendChild(this.canvas_container);
         this.el.setAttribute("tabindex", "1"); // make sure we can have focus
 
@@ -659,6 +697,7 @@ class FigureView extends widgets.DOMWidgetView {
         if(this.model.get("scene"))
             this.model.get("scene").on("rerender", () => this.update());
         this.rootObject = new THREE.Object3D();
+        this.rootObject.name = "rootObject"
         this.scene.add(this.rootObject);
 
         // if (this.model.get("scene")) {
@@ -696,6 +735,20 @@ class FigureView extends widgets.DOMWidgetView {
         this.model.on("change:box_center change:box_size", update_box);
         update_box();
 
+        this.front_box_material = new THREE.ShaderMaterial({
+            uniforms: {
+                offset: { type: "3f", value: [0, 0, 0] },
+                scale : { type: "3f", value: [1, 1, 1] },
+            },
+            fragmentShader: shaders["box-fragment"],
+            vertexShader: shaders["box-vertex"],
+            side: THREE.BackSide,
+        });
+        this.front_box_geo = new THREE.BoxBufferGeometry(1, 1, 1);
+        this.front_box_mesh = new THREE.Mesh(this.front_box_geo, this.front_box_material);
+        this.front_box_mesh.name = "Front object"
+        this.rootObject.add(this.front_box_mesh);
+
         this.mesh_views = {};
         this.scatter_views = {};
         this.volume_views = {};
@@ -717,6 +770,11 @@ class FigureView extends widgets.DOMWidgetView {
             generateMipmaps: false,
         });
 
+        this.volume_front_target = new THREE.WebGLRenderTarget(render_width, render_height, {
+            minFilter: THREE.LinearFilter,
+            magFilter: THREE.NearestFilter,
+        });
+
         this.geometry_depth_target = new THREE.WebGLRenderTarget(render_width, render_height, {
             minFilter: THREE.LinearFilter,
             magFilter: THREE.LinearFilter,
@@ -725,6 +783,11 @@ class FigureView extends widgets.DOMWidgetView {
         });
         this.geometry_depth_target.depthTexture = new THREE.DepthTexture(1, 1);
         this.geometry_depth_target.depthTexture.type = THREE.UnsignedShortType;
+
+        this.id_pass_target = new THREE.WebGLRenderTarget(render_width, render_height, {
+            minFilter: THREE.LinearFilter,
+            magFilter: THREE.NearestFilter,
+        });
 
         this.color_pass_target = new THREE.WebGLRenderTarget(render_width, render_height, {
             minFilter: THREE.LinearFilter,
@@ -782,6 +845,9 @@ class FigureView extends widgets.DOMWidgetView {
 
         // we rely here on these events listeners to be executed before those of the controls
         // since we disable the controls, seems to work on chrome
+        this.renderer.domElement.addEventListener("touchstart", this._touch_start.bind(this), false);
+        this.renderer.domElement.addEventListener("touchmove", this._touch_move.bind(this), false);
+        this.renderer.domElement.addEventListener("touchcancel", this._touch_cancel.bind(this), false);
         this.renderer.domElement.addEventListener("mousedown", this._mouse_down.bind(this), false);
         this.renderer.domElement.addEventListener("mousemove", this._mouse_move.bind(this), false);
         this.renderer.domElement.addEventListener("dblclick", this._mouse_dbl_click.bind(this), false);
@@ -1097,6 +1163,8 @@ class FigureView extends widgets.DOMWidgetView {
         this.select_icon.active(select_mode);
         const zoom_mode = this.model.get("mouse_mode") === "zoom";
         this.zoom_icon.active(zoom_mode);
+        const slice_mode = this.model.get("mouse_mode") === "slice";
+        this.slice_icon.active(slice_mode);
     }
 
     update_mouse_mode() {
@@ -1218,6 +1286,17 @@ class FigureView extends widgets.DOMWidgetView {
                 e.stopPropagation();
             }
         }
+        if (this.model.get("mouse_mode") === "slice") {
+            let [xn, yn, zn, alpha] = this.readPixelFrom(this.volume_front_target, mouseX, mouseY);
+            if(alpha > 0) {
+                xn /= 255.;
+                yn /= 255.;
+                zn /= 255.;
+                this._set_slice(xn, yn, zn);
+            }
+        }
+        const id = this.readId(mouseX, mouseY);
+        this.on_id_click(id, mouseX, mouseY);
     }
 
     _mouse_move(e) {
@@ -1239,6 +1318,12 @@ class FigureView extends widgets.DOMWidgetView {
             y: mouseY,
         };
 
+        // console.log(this.readPixelFrom(this.volume_front_target, mouseX, mouseY), mouseX, mouseY)
+        // normalized xyz coordinate of the mouse
+
+        const id = this.readId(mouseX, mouseY);
+        this.on_id_hover(id, mouseX, mouseY);
+
         this.last_zoom_coordinate = null;
         if (this.selector) {
             this.mouse_trail.push([mouseX, mouseY]);
@@ -1253,6 +1338,111 @@ class FigureView extends widgets.DOMWidgetView {
                 this.mouseDrag(pixels_right, pixels_up);
             }
         }
+        if (this.model.get("mouse_mode") === "slice") {
+            let [xn, yn, zn, alpha] = this.readPixelFrom(this.volume_front_target, mouseX, mouseY);
+            if(alpha > 0) {
+                xn /= 255.;
+                yn /= 255.;
+                zn /= 255.;
+                this._set_slice(xn, yn, zn);
+            }
+        }
+    }
+
+    _touch_start(event : TouchEvent) {
+    }
+
+    _touch_cancel(event : TouchEvent) {
+    }
+
+    _touch_move(event : TouchEvent) {
+        const touchX = event.targetTouches[0].clientX;
+        const touchY = event.targetTouches[0].clientY;
+        console.log("move", touchX, touchY)
+        if (this.model.get("mouse_mode") === "slice") {
+            let [xn, yn, zn, alpha] = this.readPixelFrom(this.volume_front_target, touchX, touchY);
+            if(alpha > 0) {
+                xn /= 255.;
+                yn /= 255.;
+                zn /= 255.;
+                this._set_slice(xn, yn, zn);
+            }
+            return false;
+        }
+    }
+
+    _set_slice(xn, yn, zn) {
+        const scales = this.model.get("scales");
+        const scales_d3 = mapValues(scales, createD3Scale);
+        const x = scales_d3.x.range([0, 1]).invert(xn);
+        const y = scales_d3.y.range([0, 1]).invert(yn);
+        const z = scales_d3.z.range([0, 1]).invert(zn);
+        // console.log(x, y, z);
+        const [xmin, xmax] = scales_d3.x.domain();
+        const [ymin, ymax] = scales_d3.y.domain();
+        const [zmin, zmax] = scales_d3.z.domain();
+        const dx = Math.abs(xmin - xmax);
+        const dy = Math.abs(ymin - ymax);
+        const dz = Math.abs(zmin - zmax);
+        const on_x = (Math.abs(x - xmin)/dx < 1e-3) || (Math.abs(x - xmax)/dx < 1e-3);
+        const on_y = (Math.abs(y - ymin)/dy < 1e-3) || (Math.abs(y - ymax)/dy < 1e-3);
+        const on_z = (Math.abs(z - zmin)/dz < 1e-3) || (Math.abs(z - zmax)/dz < 1e-3);
+        if(on_x || on_y) {
+            this.model.set("slice_z", z);
+        }
+        if(on_x || on_z) {
+            this.model.set("slice_y", y);
+        }
+        if(on_y || on_z) {
+            this.model.set("slice_x", x);
+        }
+        if(on_x || on_y || on_z) {
+            this.model.save_changes();
+        }
+
+    }
+
+    on_id_click(id, mouseX, mouseY) {
+        Object.values(this.scatter_views).forEach((scatter_view) => {
+            scatter_view.onClick(id);
+            scatter_view.popup(id, mouseX, mouseY, this.popup_container);
+        })
+        Object.values(this.mesh_views).forEach((mesh_view) => {
+            mesh_view.onClick(id);
+            mesh_view.popup(id, mouseX, mouseY, this.popup_container);
+        })
+    }
+
+    on_id_hover(id, mouseX, mouseY) {
+        this._wantsPopup = true;
+        const check_popup = () => {
+            if(this._wantsPopup) {
+                if(id == this.lastId) {
+                    this._wantsPopup = false;
+                    this._on_id_hover(id, mouseX, mouseY);
+
+                }
+            }
+        };
+        this.lastId = id; // this will avoid 'old' timeouts to show up
+        setTimeout(check_popup, this.model.get('popup_debouce'))
+    }
+
+    _on_id_hover(id, mouseX, mouseY) {
+        Object.values(this.scatter_views).forEach((scatter_view) => {
+            scatter_view.onHover(id);
+            this.popup_container.style.left = `${mouseX}px`
+            const height = this.renderer.domElement.clientHeight;
+            this.popup_container.style.bottom = `${height-mouseY}px`
+            scatter_view.popup(id, mouseX, mouseY, this.popup_container);
+        })
+        Object.values(this.mesh_views).forEach((mesh_view) => {
+            mesh_view.onHover(id);
+            this.popup_container.style.left = `${mouseX}px`
+            const height = this.renderer.domElement.clientHeight;
+            this.popup_container.style.bottom = `${height-mouseY}px`
+            mesh_view.popup(id, mouseX, mouseY, this.popup_container);
+        })
     }
 
     mouseDrag(pixels_right, pixels_up) {
@@ -1388,7 +1578,16 @@ class FigureView extends widgets.DOMWidgetView {
             this.model.set("selector", "rectangle");
             handled = true;
         }
-        if (evtobj.keyCode === 18) { // shift
+        if (evtobj.keyCode === 16) { // shift
+            // avoid ctrl and shift
+            if (!this.quick_mouse_mode_change) {
+                this.quick_mouse_mode_change = true;
+                this.quick_mouse_previous_mode = this.model.get("mouse_mode");
+                this.model.set("mouse_mode", "slice");
+                handled = true;
+            }
+        }
+        if (evtobj.keyCode === 18) { // alt
             // avoid ctrl and shift
             if (!this.quick_mouse_mode_change) {
                 this.quick_mouse_mode_change = true;
@@ -1418,7 +1617,7 @@ class FigureView extends widgets.DOMWidgetView {
         if (evtobj.altKey) {
             // console.log('released alt', this.hover)
         }
-        if ((evtobj.keyCode === 17) || (evtobj.keyCode === 18)) { // ctrl or shift
+        if ((evtobj.keyCode === 16) || (evtobj.keyCode === 17) || (evtobj.keyCode === 18)) { // ctrl or shift
             if (this.quick_mouse_mode_change) {
                 this.quick_mouse_mode_change = false;
                 this.model.set("mouse_mode", this.quick_mouse_previous_mode);
@@ -1661,6 +1860,7 @@ class FigureView extends widgets.DOMWidgetView {
         } else {
             this.scatter_views = {};
         }
+        this._update_id_offsets()
     }
 
     update_meshes() {
@@ -1695,10 +1895,12 @@ class FigureView extends widgets.DOMWidgetView {
         } else {
             this.mesh_views = {};
         }
+        this._update_id_offsets()
     }
 
     update_volumes() {
         const volumes = this.model.get("volumes") as VolumeModel[]; // This is always a list?
+        const previous = this.model.previous("volumes") as VolumeModel[]; // This is always a list?
         if (volumes.length !== 0) { // So now check if list has length 0
             const current_volume_cids = [];
                 // Add new volumes if not already as volume view in figure
@@ -1713,6 +1915,7 @@ class FigureView extends widgets.DOMWidgetView {
                         options,
                         model: volume_model,
                     });
+                    volume_model.add_to_scene(this.rootObject);
                     this.volume_views[volume_model.cid] = volume_view;
                     volume_view.render();
                 }
@@ -1722,12 +1925,32 @@ class FigureView extends widgets.DOMWidgetView {
             for (const cid of Object.keys(this.volume_views)) {
                 const volume_view = this.volume_views[cid];
                 if (current_volume_cids.indexOf(cid) === -1) {
-                    volume_view.remove_from_scene();
+                    // volume_view.remove_from_scene();
                     delete this.volume_views[cid];
                 }
             }
         } else {
             this.volume_views = {};
+        }
+        if(previous) {
+            for(let prev of previous) {
+                if(!volumes.includes(prev)) {
+                    prev.remove_from_scene(this.rootObject);
+                }
+            }
+        }
+        this._update_id_offsets();
+    }
+
+    _update_id_offsets() {
+        let offset = 1; // start at 1, 0 is reserved for nothing selected
+        for (const scatterView of Object.values(this.scatter_views)) {
+            scatterView.uniforms.id_offset['value'] = offset;
+            offset += scatterView.length;
+        }
+        for (const meshView of Object.values(this.mesh_views)) {
+            meshView.uniforms.id_offset['value'] = offset;
+            offset += meshView.length;
         }
     }
 
@@ -1788,6 +2011,8 @@ class FigureView extends widgets.DOMWidgetView {
     }
 
     on_orientationchange(e) {
+        if(!this.model.get("orientation_control"))
+            return;
         for (const scene of [this.scene, this.scene_opaque]) {
             scene.rotation.reorder("XYZ");
             scene.rotation.x = (e.gamma * Math.PI / 180 + Math.PI * 2);
@@ -2080,7 +2305,9 @@ class FigureView extends widgets.DOMWidgetView {
 
     _render_eye(camera) {
         this.camera.updateMatrixWorld();
-        const has_volumes = this.model.get("volumes").length !== 0;
+        let volumes = this.model.get("volumes") as VolumeModel[];
+        volumes = volumes.filter((volume) => volume.get("visible"))
+        const has_volumes = volumes.length !== 0;
         const panorama = this.model.get("panorama_mode") !== "no";
         // record who is visible
         const wasVisible = this.rootObject.children.reduce((map, o) => {
@@ -2096,6 +2323,8 @@ class FigureView extends widgets.DOMWidgetView {
                    //@ts-ignore
                    o.visible = !Boolean(o.isVolume)
                 }
+                if(o === this.front_box_mesh)
+                    this.front_box_mesh.visible = false;
             })
         };
         const restoreVisible = () => {
@@ -2145,17 +2374,28 @@ class FigureView extends widgets.DOMWidgetView {
             return;
         }
 
+        // we always render the front
+        this.rootObject.children.forEach((o) => {
+            o.visible = false;
+        })
+        this.front_box_mesh.visible = true;
+        (this.front_box_mesh.material as THREE.ShaderMaterial).side  = THREE.FrontSide;
+        this.renderer.setRenderTarget(this.volume_front_target);
+        this.renderer.clear(true, true, true);
+        this.renderer.render(this.scene, camera, this.volume_front_target);
+        this.front_box_mesh.visible = false;
+
+
         // render the back coordinates of the box
         if (has_volumes) {
             // to render the back sides of the boxes, we need to invert the z buffer value
             // and invert the test
             this.renderer.state.buffers.depth.setClear(0);
-            // _.each(this.volume_views, (volume_view) => {
-            for (const volume_view of Object.values(this.volume_views)) {
-                volume_view.box_material.side = THREE.BackSide;
-                volume_view.box_material.depthFunc = THREE.GreaterDepth;
-                volume_view.vol_box_mesh.material = volume_view.box_material;
-                volume_view.set_scales(this.model.get("scales"));
+            for (const volume_model of volumes) {
+                volume_model.box_material.side = THREE.BackSide;
+                volume_model.box_material.depthFunc = THREE.GreaterDepth;
+                volume_model.vol_box_mesh.material = volume_model.box_material;
+                volume_model.set_scales(this.model.get("scales"));
             }
             this.renderer.setRenderTarget(this.volume_back_target);
             this.renderer.clear(true, true, true);
@@ -2171,7 +2411,6 @@ class FigureView extends widgets.DOMWidgetView {
             this.renderer.render(this.scene, camera, this.geometry_depth_target);
             this.renderer.render(this.scene_opaque, camera, this.geometry_depth_target);
             this.renderer.autoClear = true;
-
         }
 
         // Normal color pass of geometry for final screen pass
@@ -2188,9 +2427,9 @@ class FigureView extends widgets.DOMWidgetView {
             // so that once we render the box again, each fragment will be processed
             // once.
             this.renderer.context.colorMask(0, 0, 0, 0);
-            for (const volume_view of Object.values(this.volume_views)) {
-                volume_view.box_material.side = THREE.FrontSide;
-                volume_view.box_material.depthFunc = THREE.LessEqualDepth;
+            for (const volume_model of volumes) {
+                volume_model.box_material.side = THREE.FrontSide;
+                volume_model.box_material.depthFunc = THREE.LessEqualDepth;
             }
             this.renderer.autoClear = false;
             this.renderer.setRenderTarget(this.color_pass_target);
@@ -2201,8 +2440,8 @@ class FigureView extends widgets.DOMWidgetView {
             this.renderer.context.colorMask(true, true, true, true);
 
             // TODO: if volume perfectly overlap, we render it twice, use polygonoffset and LESS z test?
-            for (const volume_view of Object.values(this.volume_views)) {
-                volume_view.vol_box_mesh.material = this.material_multivolume;
+            for (const volume_model of volumes) {
+                volume_model.vol_box_mesh.material = this.material_multivolume;
                 // volume_view.set_geometry_depth_tex(this.geometry_depth_target.depthTexture)
             }
             this.renderer.autoClear = false;
@@ -2234,6 +2473,26 @@ class FigureView extends widgets.DOMWidgetView {
         this.renderer.render(this.scene, camera, this.coordinate_target);
         this.renderer.autoClear = true;
 
+        // id pass
+        // set ID material for coordinate texture render
+        for (const scatter_view of Object.values(this.scatter_views)) {
+            scatter_view.mesh.material = scatter_view.mesh.material_id;
+        }
+        for (const mesh_view of Object.values(this.mesh_views)) {
+            mesh_view.meshes.forEach((threejs_mesh) => {
+                threejs_mesh.material = threejs_mesh.material_id;
+            });
+        }
+
+        // we also render this for the ids
+        this.renderer.autoClear = false;
+        this.renderer.setClearAlpha(0);
+        this.renderer.setRenderTarget(this.id_pass_target);
+        this.renderer.clear(true, true, true);
+        setVisible({volumes: false});
+        this.renderer.render(this.scene, camera, this.id_pass_target);
+        this.renderer.autoClear = true;
+
         // now we render the weighted coordinate for the volumetric data
         // make sure where we don't render, alpha = 0
         if (has_volumes) {
@@ -2241,9 +2500,9 @@ class FigureView extends widgets.DOMWidgetView {
             // TODO: this render pass is only needed when the coordinate is required
             // we slow down by a factor of 2 by always doing this
             this.renderer.context.colorMask(0, 0, 0, 0);
-            for (const volume_view of Object.values(this.volume_views)) {
-                volume_view.box_material.side = THREE.FrontSide;
-                volume_view.box_material.depthFunc = THREE.LessEqualDepth;
+            for (const volume_model of volumes) {
+                volume_model.box_material.side = THREE.FrontSide;
+                volume_model.box_material.depthFunc = THREE.LessEqualDepth;
             }
             this.renderer.autoClear = false;
             this.renderer.setRenderTarget(this.color_pass_target);
@@ -2254,8 +2513,8 @@ class FigureView extends widgets.DOMWidgetView {
             this.renderer.context.colorMask(true, true, true, true);
 
             // TODO: if volume perfectly overlap, we render it twice, use polygonoffset and LESS z test?
-            for (const volume_view of Object.values(this.volume_views)) {
-                volume_view.vol_box_mesh.material = this.material_multivolume_depth;
+            for (const volume_model of volumes) {
+                volume_model.vol_box_mesh.material = this.material_multivolume_depth;
                 // volume_view.set_geometry_depth_tex(this.geometry_depth_target.depthTexture)
             }
             this.renderer.autoClear = false;
@@ -2284,10 +2543,12 @@ class FigureView extends widgets.DOMWidgetView {
         } else {
             // render to screen
             this.screen_texture = {
-                Volume: this.color_pass_target,
-                Back: this.volume_back_target,
-                Geometry_back: this.geometry_depth_target,
-                Coordinate: this.coordinate_target,
+                render: this.color_pass_target,
+                front: this.volume_front_target,
+                back: this.volume_back_target,
+                // Geometry_back: this.geometry_depth_target,
+                coordinate: this.coordinate_target,
+                id: this.id_pass_target,
             }[this.model.get("show")];
             // TODO: remove any
             this.screen_material.uniforms.tex.value = (this.screen_texture as any).texture;
@@ -2334,10 +2595,8 @@ class FigureView extends widgets.DOMWidgetView {
     }
 
     rebuild_multivolume_rendering_material() {
-        const volumes = this.model.get("volumes") as VolumeModel[]; // This is always a list?
-        if (volumes.length === 0) {
-            return;
-        }
+        let volumes = this.model.get("volumes") as VolumeModel[];
+        volumes = volumes.filter((volume) => volume.get("visible"))
 
         const material = this.material_multivolume;
         const material_depth = this.material_multivolume_depth;
@@ -2354,23 +2613,21 @@ class FigureView extends widgets.DOMWidgetView {
             return volume_view ? volume_view.get_ray_steps() : 0;
         });
 
-        // _.each(volumes, (vol_model) => {
+        if (volumes.length === 0) {
+            return;
+        }
+
         for (const volume_model of volumes) {
-            const volume_view = this.volume_views[volume_model.cid];
-            // could be that the view was not yet created
-            if (volume_view) {
-                const volume = volume_view.model;
-                if (volume_view.is_normal()) {
-                    count_normal++;
-                    material.uniforms.volumes.value.push(volume_view.uniform_volumes_values);
-                    material.uniforms.data.value.push(volume_view.uniform_data.value[0]);
-                    material.uniforms.transfer_function.value.push(volume_view.uniform_transfer_function.value[0]);
-                } else {
-                    count_max_int++;
-                    material.uniforms.volumes_max_int.value.push(volume_view.uniform_volumes_values);
-                    material.uniforms.data_max_int.value.push(volume_view.uniform_data.value[0]);
-                    material.uniforms.transfer_function_max_int.value.push(volume_view.uniform_transfer_function.value[0]);
-                }
+            if (volume_model.is_normal()) {
+                count_normal++;
+                material.uniforms.volumes.value.push(volume_model.uniform_volumes_values);
+                material.uniforms.data.value.push(volume_model.uniform_data.value[0]);
+                material.uniforms.transfer_function.value.push(volume_model.uniform_transfer_function.value[0]);
+            } else {
+                count_max_int++;
+                material.uniforms.volumes_max_int.value.push(volume_model.uniform_volumes_values);
+                material.uniforms.data_max_int.value.push(volume_model.uniform_data.value[0]);
+                material.uniforms.transfer_function_max_int.value.push(volume_model.uniform_transfer_function.value[0]);
             }
         }
         material.defines.VOLUME_COUNT = count_normal;
@@ -2387,8 +2644,8 @@ class FigureView extends widgets.DOMWidgetView {
             return Mustache.render(template_shader, view);
         };
         const _shaders = this.model.get("_shaders");
-        material_depth.fragmentShader = material.fragmentShader = mustache_render(_shaders["volr-fragment"] || shaders["volr-fragment"]);
-        material_depth.vertexShader = material.vertexShader = _shaders["volr-vertex"] || shaders["volr-vertex"];
+        material_depth.fragmentShader = material.fragmentShader = patchShader(mustache_render(_shaders["volr-fragment"] || shaders["volr-fragment"]));
+        material_depth.vertexShader = material.vertexShader = patchShader(_shaders["volr-vertex"] || shaders["volr-vertex"]);
         material_depth.needsUpdate = material.needsUpdate = true;
     }
 
@@ -2455,10 +2712,12 @@ class FigureView extends widgets.DOMWidgetView {
         this.material_multivolume.uniforms.render_size.value = [render_width, render_height];
 
         this.volume_back_target.setSize(render_width, render_height);
+        this.volume_front_target.setSize(render_width, render_height);
         this.geometry_depth_target.setSize(render_width, render_height);
         this.color_pass_target.setSize(render_width, render_height);
         this.screen_pass_target.setSize(render_width, render_height);
         this.coordinate_target.setSize(render_width, render_height);
+        this.id_pass_target.setSize(render_width, render_height);
 
         this.screen_texture = this.color_pass_target.texture;
         if (!skip_update) {

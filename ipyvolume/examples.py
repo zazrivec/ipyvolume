@@ -234,7 +234,7 @@ def brain(
         return xlist, ylist, zlist, polys
 
 
-def head(draw=True, show=True, max_shape=256):
+def head(draw=True, show=True, max_shape=256, description="Male head"):
     """Show a volumetric rendering of a human male head."""
     # inspired by http://graphicsrunner.blogspot.com/2009/01/volume-rendering-102-transfer-functions.html
     import ipyvolume as ipv
@@ -262,8 +262,9 @@ def head(draw=True, show=True, max_shape=256):
     tf = ipv.TransferFunction(rgba=tf_data.astype(np.float32))
 
     head_data = ipv.datasets.head.fetch().data
+    head_data = head_data.transpose((1, 0, 2))[::-1, ::-1, ::-1]
     if draw:
-        vol = ipv.volshow(head_data, tf=tf, max_shape=max_shape)
+        vol = ipv.volshow(head_data, tf=tf, max_shape=max_shape, description=description)
         if show:
             ipv.show()
         return vol
@@ -271,7 +272,7 @@ def head(draw=True, show=True, max_shape=256):
         return head_data
 
 
-def gaussian(N=1000, draw=True, show=True, seed=42, color=None, marker='sphere'):
+def gaussian(N=1000, draw=True, show=True, seed=42, color=None, marker='sphere', description="Gaussian blob", **kwargs):
     """Show N random gaussian distributed points using a scatter plot."""
     import ipyvolume as ipv
 
@@ -280,9 +281,9 @@ def gaussian(N=1000, draw=True, show=True, seed=42, color=None, marker='sphere')
 
     if draw:
         if color:
-            mesh = ipv.scatter(x, y, z, marker=marker, color=color)
+            mesh = ipv.scatter(x, y, z, marker=marker, color=color, description=description, **kwargs)
         else:
-            mesh = ipv.scatter(x, y, z, marker=marker)
+            mesh = ipv.scatter(x, y, z, marker=marker, description=description, **kwargs)
         if show:
             # ipv.squarelim()
             ipv.show()

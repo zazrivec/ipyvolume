@@ -1,4 +1,5 @@
 import * as widgets from "@jupyter-widgets/base";
+import { WidgetModel, WidgetView } from "@jupyter-widgets/base";
 import { isArray, isEqual, isNumber, isString } from "lodash";
 import * as THREE from "three";
 import { FigureView } from "./figure";
@@ -7,6 +8,8 @@ import { createColormap, patchShader, scaleTypeMap } from "./scales";
 import * as serialize from "./serialize.js";
 import { materialToLightingModel, semver_range } from "./utils";
 import * as values from "./values.js";
+import { Object3DView } from "./object3d";
+import { VolumeModel } from ".";
 
 const shaders = {
     "mesh-vertex": (require("raw-loader!../glsl/mesh-vertex.glsl") as any).default,
@@ -14,7 +17,7 @@ const shaders = {
 };
 
 export
-class MeshView extends widgets.WidgetView {
+class MeshView extends Object3DView {
     figure: FigureView;
     previous_values: any;
     attributes_changed: any;
@@ -26,10 +29,12 @@ class MeshView extends widgets.WidgetView {
 
     material: any;
     material_rgb: any;
+    material_id: any;
     material_depth: any;
     material_distance: any;
     line_material: any;
     line_material_rgb: any;
+    line_material_id: any;
     materials: any;
     scale_defines: {};
 
@@ -38,6 +43,7 @@ class MeshView extends widgets.WidgetView {
     texture_video: any;
 
     lighting_model: any;
+    length = 1;
 
     render() {
         // console.log("created mesh view, parent is")
@@ -77,6 +83,11 @@ class MeshView extends widgets.WidgetView {
                 texture: { type: "t", value: null },
                 texture_previous: { type: "t", value: null },
                 colormap: {type: "t", value: null},
+                id_offset : { type: "f", value: 0 },
+                volume_texture: {type: "t", value: null},
+                transfer_function: {type: "t", value: null},
+                position_offset : { type: "3f", value: [0, 0, 0] },
+                volume: {value: null},
                 ...THREE.UniformsUtils.merge([THREE.UniformsLib["common"], THREE.UniformsLib["lights"]])
             };
 
@@ -94,13 +105,15 @@ class MeshView extends widgets.WidgetView {
         };
         this.material = get_material("material");
         this.material_rgb = get_material("material");
+        this.material_id = get_material("material");
         this.line_material = get_material("line_material");
         this.material.polygonOffset = true;
         this.material.polygonOffsetFactor = 1;
         this.material.polygonOffsetUnits = 0.1;
         // this.material.depthFunc = THREE.LessEqualDepth
         this.line_material_rgb = get_material("line_material");
-        this.materials = [this.material, this.material_rgb, this.line_material, this.line_material_rgb];
+        this.line_material_id = get_material("line_material");
+        this.materials = [this.material, this.material_rgb, this.material_id, this.line_material, this.line_material_rgb, this.line_material_id];
         this._update_materials();
         if (this.model.get("material")) {
             this.model.get("material").on("change", () => {
@@ -113,9 +126,24 @@ class MeshView extends widgets.WidgetView {
             });
         }
 
+        const update_volume = () => {
+            this._update_materials();
+        }
+        this.model.on("change:volume", update_volume, this);
+
         this._update_color_scale();
         this.create_mesh();
         this.add_to_scene();
+
+        const update_position_offset = () => {
+            const x = this.model.get("x_offset");
+            const y = this.model.get("y_offset");
+            const z = this.model.get("z_offset");
+            this.uniforms.position_offset.value = [x, y, z];
+            this.figure.update();
+        }
+        this.model.on("change:x_offset change:y_offset change:z_offset", update_position_offset);
+        update_position_offset();
 
         this.model.on("change:color change:sequence_index change:x change:y change:z change:v change:u change:triangles change:lines",
             this.on_change, this);
@@ -124,6 +152,7 @@ class MeshView extends widgets.WidgetView {
         this.model.on("change:texture", this._load_textures, this);
         this.model.on("change:visible change:lighting_model change:opacity change:material change:cast_shadow change:receive_shadow", this._update_materials, this);
     }
+
 
     public _load_textures() {
         const texture = this.model.get("texture");
@@ -358,11 +387,17 @@ class MeshView extends widgets.WidgetView {
         if (this.model.get("material")) {
             this.material_rgb.copy(this.model.get("material").obj);
         }
+        if (this.model.get("material")) {
+            this.material_id.copy(this.model.get("material").obj);
+        }
         if (this.model.get("line_material")) {
             this.line_material.copy(this.model.get("line_material").obj);
         }
         if (this.model.get("line_material")) {
             this.line_material_rgb.copy(this.model.get("line_material").obj);
+        }
+        if (this.model.get("line_material")) {
+            this.line_material_id.copy(this.model.get("line_material").obj);
         }
         this.lighting_model = materialToLightingModel(this.material);
         // update material defines in order to run correct shader code
@@ -370,15 +405,19 @@ class MeshView extends widgets.WidgetView {
         this.material.defines[`AS_${this.lighting_model}`] = true;
         this.material.extensions = {derivatives: true};
         this.material_rgb.defines = {AS_COORDINATE: true, USE_COLOR: true, ...this.scale_defines};
+        this.material_id.defines = {AS_ID: true, USE_COLOR: true, ...this.scale_defines};
         this.line_material.defines = {IS_LINE: true, ...this.scale_defines};
         this.line_material.defines[`AS_${this.lighting_model}`] = true;
         this.line_material_rgb.defines = {IS_LINE: true, AS_COORDINATE: true, USE_COLOR: true, ...this.scale_defines};
+        this.line_material_id.defines = {IS_LINE: true, AS_ID: true, USE_COLOR: true, ...this.scale_defines};
 
         // locally and the visible with this object's visible trait
         this.material.visible = this.material.visible && this.model.get("visible");
         this.material_rgb.visible = this.material.visible && this.model.get("visible");
+        this.material_id.visible = this.material.visible && this.model.get("visible");
         this.line_material.visible = this.line_material.visible && this.model.get("visible");
         this.line_material_rgb.visible = this.line_material.visible && this.model.get("visible");
+        this.line_material_id.visible = this.line_material.visible && this.model.get("visible");
 
         const vertexShader = this.figure.model.get('_shaders')['mesh-vertex'] || shaders['mesh-vertex']
         const fragmentShader = this.figure.model.get('_shaders')['mesh-fragment'] || shaders['mesh-fragment']
@@ -408,10 +447,9 @@ class MeshView extends widgets.WidgetView {
 
         this.materials.forEach((material) => {
             material.onBeforeCompile = (shader) => {
-                shader.vertexShader = vertexShader;
-                shader.fragmentShader = fragmentShader;
+                shader.vertexShader = patchShader(vertexShader);
+                shader.fragmentShader = patchShader(fragmentShader);
                 shader.uniforms = {...shader.uniforms, ...this.uniforms};
-                patchShader(shader);
             };
             material.alphaTest = 0.5 + cache_thrasher;
             material.needsUpdate = true;
@@ -424,10 +462,19 @@ class MeshView extends widgets.WidgetView {
         if (texture && this.textures) {
             this.material.defines.USE_TEXTURE = true;
         }
+        const volume = this.model.get("volume") as VolumeModel;
+        if (volume) {
+            this.material.defines.USE_VOLUME = true;
+            this.uniforms.volume_texture.value = volume.texture_volume;
+            this.uniforms.transfer_function.value = volume.texture_tf;
+            this.uniforms.volume.value = volume.uniform_volumes_values;
+        }
         this.material.needsUpdate = true;
         this.material_rgb.needsUpdate = true;
+        this.material_id.needsUpdate = true;
         this.line_material.needsUpdate = true;
         this.line_material_rgb.needsUpdate = true;
+        this.line_material_id.needsUpdate = true;
         if(this.surface_mesh) {
             this.surface_mesh.customDepthMaterial = this.material_depth;
             this.surface_mesh.customDistanceMaterial = this.material_distance;
@@ -558,9 +605,9 @@ class MeshView extends widgets.WidgetView {
             const v = current.array.v;
             if (texture && u && v && this.textures) {
                 const sequence_index_texture = sequence_index;
-                this.material.uniforms.texture.value = this.textures[sequence_index_texture % this.textures.length]; // TODO/BUG: there could
+                this.uniforms.texture.value = this.textures[sequence_index_texture % this.textures.length]; // TODO/BUG: there could
                 // be a situation where texture property is modified, but this.textures isn't done yet..
-                this.material.uniforms.texture_previous.value = this.textures[sequence_index_previous % this.textures.length];
+                this.uniforms.texture_previous.value = this.textures[sequence_index_previous % this.textures.length];
                 geometry.addAttribute("u", new THREE.BufferAttribute(u, 1));
                 geometry.addAttribute("v", new THREE.BufferAttribute(v, 1));
                 const u_previous = previous.array.u;
@@ -574,12 +621,14 @@ class MeshView extends widgets.WidgetView {
             const fragmentShader = this.figure.model.get('_shaders')['mesh-fragment'] || shaders['mesh-fragment']
 
             this.surface_mesh = new THREE.Mesh(geometry, this.material);
+            this.surface_mesh.name = "Mesh: " + this.model.get("description");
             this.surface_mesh.customDepthMaterial = this.material_depth;
             this.surface_mesh.customDistanceMaterial = this.material_distance;
             // BUG? because of our custom shader threejs thinks our object if out
             // of the frustum
             this.surface_mesh.frustumCulled = false;
             this.surface_mesh.material_rgb = this.material_rgb;
+            this.surface_mesh.material_id = this.material_id;
             this.surface_mesh.material_normal = this.material;
             this.surface_mesh.castShadow = this.model.get("cast_shadow");
             this.surface_mesh.receiveShadow = this.model.get("receive_shadow");
@@ -610,9 +659,11 @@ class MeshView extends widgets.WidgetView {
             geometry.setIndex(new THREE.BufferAttribute(indices, 1));
 
             this.line_segments = new THREE.LineSegments(geometry, this.line_material);
+            this.line_segments.name = "Line for Mesh: " + this.model.get("description");
             this.line_segments.frustumCulled = false;
             // TODO: check lines with volume rendering, also in scatter
             this.line_segments.material_rgb = this.line_material_rgb;
+            this.line_segments.material_id = this.line_material_id;
             this.line_segments.material_normal = this.line_material;
             this.meshes.push(this.line_segments);
         } else {
@@ -653,8 +704,10 @@ class MeshModel extends widgets.WidgetModel {
         color: serialize.color_or_json,
         color_scale: { deserialize: widgets.unpack_models },
         texture: serialize.texture,
+        volume: { deserialize: widgets.unpack_models },
         material: { deserialize: widgets.unpack_models },
         line_material: { deserialize: widgets.unpack_models },
+        popup: { deserialize: widgets.unpack_models },
     };
     defaults() {
         return {
@@ -674,6 +727,18 @@ class MeshModel extends widgets.WidgetModel {
             visible_faces: true,
             cast_shadow : true,
             receive_shadow : true,
+            volume: null,
+            x_offset: 0,
+            y_offset: 0,
+            z_offset: 0,
+            description: 'mesh - noname',
+            description_color: 'red',
+            hovered: null,
+            icon: null,
+            line_material: null,
+            material: null,
+            popup: null,
+            clicked: null,
         };
     }
 }
